@@ -41,7 +41,14 @@ Retorne apenas:
 """
 
 
-def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True) -> dict[str, Any]:
+def construir_estado_inicial(
+    pergunta: str,
+    db_path: str,
+    inferir_fks_virtuais: bool = False,
+    usar_schemacrawler: bool = True,
+    db_dialeto: str = "sqlite",
+    db_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
         "pergunta_original": pergunta,
@@ -55,6 +62,8 @@ def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: 
         "status": "iniciado",
         "tentativas_loop": 0,
         "db_path": db_path,
+        "db_dialeto": db_dialeto,
+        "db_config": db_config,
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],

@@ -58,6 +58,38 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Caminho para o banco SQLite.",
     )
     parser.add_argument(
+        "--db-dialeto",
+        choices=["sqlite", "postgresql", "mysql"],
+        default="sqlite",
+        help="Dialeto do banco: sqlite, postgresql ou mysql. Padrão: sqlite.",
+    )
+    parser.add_argument(
+        "--db-host",
+        default=None,
+        help="Host do banco (obrigatório se --db-dialeto != sqlite).",
+    )
+    parser.add_argument(
+        "--db-port",
+        type=int,
+        default=None,
+        help="Porta do banco (padrão: 5432 para postgresql, 3306 para mysql).",
+    )
+    parser.add_argument(
+        "--db-name",
+        default=None,
+        help="Nome do banco de dados remoto.",
+    )
+    parser.add_argument(
+        "--db-user",
+        default=None,
+        help="Usuário do banco remoto.",
+    )
+    parser.add_argument(
+        "--db-password",
+        default=None,
+        help="Senha do banco remoto.",
+    )
+    parser.add_argument(
         "--model",
         default="gpt-5-mini",
         help="Modelo LLM a utilizar (ex: gemini-2.5-flash, gpt-5-nano).",
@@ -122,11 +154,21 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             f"Variável de ambiente '{args.api_key_env}' não encontrada. "
             "Configure a chave da API antes de executar."
         )
-
+    db_config = None
+    if args.db_dialeto != "sqlite":
+        db_config = {
+            "host": args.db_host,
+            "port": args.db_port,
+            "database": args.db_name,
+            "user": args.db_user,
+            "password": args.db_password,
+        }
     engine = InsightEngine(
         api_key=api_key,
         model=args.model,
         db_path=args.db_path,
+        db_dialeto=args.db_dialeto,
+        db_config=db_config,
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
         inferir_fks_virtuais=inferir_fks_ativado,
