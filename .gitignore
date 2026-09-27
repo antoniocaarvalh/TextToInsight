@@ -147,6 +147,7 @@ chroma_db/
 .schema_hash
 spider2-lite
 Spider2/
+.schema_cache/
 
 # testes
 /meus_testes/*
@@ -156,3 +157,12 @@ Spider2/
 
 # commit.txt (arquivo temporário usado para textos de commit personalizados)
 commit.txt
+
+# temporary notes 
+temp_notes/
+
+# skills 
+.agents/
+
+# graphify
+graphify-out/
