@@ -90,6 +90,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Senha do banco remoto.",
     )
     parser.add_argument(
+        "--db-url",
+        default=os.getenv("DATABASE_URL"),
+        help=(
+            "URL unica de conexao (ex: postgresql://usuario:senha@host:5432/banco). "
+            "Se informado, o dialeto e detectado automaticamente pelo SQLAlchemy e as "
+            "demais flags --db-dialeto/--db-host/--db-port/--db-name/--db-user/--db-password "
+            "sao ignoradas. Tambem pode vir da variavel de ambiente DATABASE_URL."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default="gpt-5-mini",
         help="Modelo LLM a utilizar (ex: gemini-2.5-flash, gpt-5-nano).",
@@ -169,6 +179,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         db_path=args.db_path,
         db_dialeto=args.db_dialeto,
         db_config=db_config,
+        db_url=args.db_url or "",
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
         inferir_fks_virtuais=inferir_fks_ativado,

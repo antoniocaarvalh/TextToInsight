@@ -78,6 +78,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     linhas_resultado_completo: list[dict[str, Any]]
     schemacrawler_bin : str | None
     db_dialeto: DialetoBanco
+    db_url: str
     db_config: dict[str, Any] | None
     inferir_fks_virtuais: bool
     usar_schemacrawler: bool

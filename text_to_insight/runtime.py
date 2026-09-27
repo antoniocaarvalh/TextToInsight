@@ -48,6 +48,7 @@ def construir_estado_inicial(
     usar_schemacrawler: bool = True,
     db_dialeto: str = "sqlite",
     db_config: dict[str, Any] | None = None,
+    db_url: str = "",
 ) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
@@ -63,6 +64,7 @@ def construir_estado_inicial(
         "tentativas_loop": 0,
         "db_path": db_path,
         "db_dialeto": db_dialeto,
+        "db_url": db_url,
         "db_config": db_config,
         "espera_humana": False,
         "linhas_resultado_completo": [],

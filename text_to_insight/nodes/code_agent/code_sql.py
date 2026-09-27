@@ -306,3 +306,54 @@ def executar_sql(
     if dialeto == "mysql":
         return executar_sql_mysql(db_config or {}, sql, limite_preview, timeout_segundos)
     return executar_sql_sqlite(db_path, sql, limite_preview, timeout_segundos)
+
+
+def executar_sql_via_url(
+    db_url: str,
+    sql: str,
+    limite_preview: int = 5,
+    timeout_segundos: float = 15.0,
+) -> dict[str, Any]:
+    """
+    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
+    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
+    mysql+pymysql://, etc). Alternativa mais simples ao `executar_sql`
+    quando o estado traz `db_url` em vez de `db_dialeto`/`db_config`.
+    """
+    ok, erro_validacao = validar_sql_segura(sql)
+    if not ok:
+        return _erro_execucao(f"SQL invalida: {erro_validacao}")
+
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(db_url)
+    try:
+        opcoes = {}
+        if engine.dialect.name == "postgresql":
+            opcoes["postgresql_readonly"] = True
+
+        with engine.connect() as conn:
+            conn = conn.execution_options(**opcoes) if opcoes else conn
+
+            if engine.dialect.name == "mysql":
+                conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
+
+            resultado = conn.execute(text(sql))
+            rows = [dict(linha) for linha in resultado.mappings().all()]
+    except Exception as e:
+        return _erro_execucao(f"Falha ao executar SQL: {e}")
+    finally:
+        engine.dispose()
+
+    total = len(rows)
+    return {
+        "ok": True,
+        "erro_execucao": "",
+        "linhas_resultado_preview": rows[:limite_preview],
+        "linhas_resultado_completo": rows,
+        "total_linhas_resultado": total,
+        "saida_terminal": (
+            f"[SANDBOX] Execucao OK | linhas_total={total} "
+            f"| preview={min(total, limite_preview)}"
+        ),
+    }

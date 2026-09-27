@@ -33,6 +33,7 @@ class InsightEngine:
         usar_schemacrawler: bool = True,
         db_dialeto: str = "sqlite",
         db_config: dict | None = None,
+        db_url: str = "",
     ):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
@@ -44,6 +45,7 @@ class InsightEngine:
         self._usar_schemacrawler = usar_schemacrawler
         self._db_dialeto = db_dialeto
         self._db_config = db_config
+        self._db_url = db_url
         self._model = model
         self._db_path = db_path
         self._use_cot = use_cot
@@ -151,7 +153,7 @@ class InsightEngine:
         elif query:
             estado_execucao = construir_estado_inicial(
                 query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler,
-                db_dialeto=self._db_dialeto, db_config=self._db_config,
+                db_dialeto=self._db_dialeto, db_config=self._db_config, db_url=self._db_url,
             )
             pergunta_exibicao = query
         # Caso 3: a thread já está pausada, mas ainda sem resposta do usuário.

@@ -591,6 +591,51 @@ def _introspeccao_nativa(dialeto: str, caminho_db: Path | None, db_cfg: dict) ->
     with conn:
         return _formatar_schema_sqlite(conn)
 
+def _formatar_schema_sqlalchemy(engine) -> str:
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    dialeto = engine.dialect.name
+    tabelas = insp.get_table_names()
+
+    partes = [f"=== SCHEMA {dialeto.upper()} (SQLALCHEMY) ===", ""]
+
+    if not tabelas:
+        partes.append("Nenhuma tabela encontrada no banco.")
+        return "\n".join(partes)
+
+    for tabela in sorted(tabelas):
+        partes.append(f"Tabela: {tabela}")
+
+        pk_cols = set(insp.get_pk_constraint(tabela).get("constrained_columns") or [])
+        colunas = insp.get_columns(tabela)
+
+        if colunas:
+            for col in colunas:
+                flags = []
+                if col["name"] in pk_cols:
+                    flags.append("PK")
+                if not col.get("nullable", True):
+                    flags.append("NOT NULL")
+                sufixo = f" ({', '.join(flags)})" if flags else ""
+                partes.append(f"- {col['name']}: {col['type']}{sufixo}")
+        else:
+            partes.append("- [sem colunas detectadas]")
+
+        fks = insp.get_foreign_keys(tabela)
+        if fks:
+            partes.append("  Foreign keys:")
+            for fk in fks:
+                cols_origem = fk.get("constrained_columns") or []
+                tabela_ref = fk.get("referred_table")
+                cols_destino = fk.get("referred_columns") or []
+                for col_origem, col_destino in zip(cols_origem, cols_destino):
+                    partes.append(f"  - {col_origem} -> {tabela_ref}.{col_destino}")
+
+        partes.append("")
+
+    return "\n".join(partes)
+
 
 # ---------------------------------------------------------------------------
 # Heurística para analisar a estrutura do schema e injegar relações implícitas
@@ -759,6 +804,21 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         status (str)
         tem_descricao (bool)
     """
+    db_url = estado.get("db_url", "").strip()
+    if db_url:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(db_url)
+        try:
+            contexto = _formatar_schema_sqlalchemy(engine)
+        finally:
+            engine.dispose()
+        return {
+            "contexto_schema": contexto,
+            "erro_execucao": "",
+            "status": "schema_obtido",
+            "tem_descricao": False,
+        }
     db_path = estado.get("db_path", "").strip()
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
     db_cfg  = estado.get("db_config") or {}

@@ -6,7 +6,7 @@ retornando resultado estruturado.
 """
 
 from ..state import EstadoTextToInsight
-from .code_agent.code_sql import executar_sql
+from .code_agent.code_sql import executar_sql, executar_sql_via_url
 
 
 def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
@@ -22,7 +22,11 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
     db_config = estado.get("db_config") or {}
     dialeto = estado.get("db_dialeto", "sqlite")
 
-    alvo = db_path if dialeto == "sqlite" else f"{dialeto}://{db_config.get('host', '?')}/{db_config.get('database', '?')}"
+    db_url = estado.get("db_url", "").strip()
+
+    alvo = "banco via db_url (dialeto auto-detectado)" if db_url else (
+        db_path if dialeto == "sqlite" else f"{dialeto}://{db_config.get('host', '?')}/{db_config.get('database', '?')}"
+    )
     print(f"[EXECUTOR] Executando SQL contra {alvo}...")
 
     if not sql:
@@ -33,7 +37,10 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "status": "exec_erro",
         }
 
-    resultado = executar_sql(dialeto, sql, db_path=db_path, db_config=db_config)
+    if db_url:
+        resultado = executar_sql_via_url(db_url, sql)
+    else:
+        resultado = executar_sql(dialeto, sql, db_path=db_path, db_config=db_config)
 
     if resultado["ok"]:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")
