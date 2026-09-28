@@ -13,8 +13,24 @@ from pathlib import Path
 from typing import Any
 
 # Expressão regular para detectar comandos SQL potencialmente perigosos.
+#
+# Além dos comandos de escrita/DDL óbvios, bloqueia também construções que
+# COMEÇAM com SELECT/WITH (logo passariam pela checagem de "apenas leitura")
+# mas na prática escrevem ou leem arquivos no servidor de banco:
+#   - MySQL: "SELECT ... INTO OUTFILE/DUMPFILE" escreve um arquivo;
+#            LOAD_FILE() lê um arquivo arbitrário do disco.
+#   - PostgreSQL: pg_read_file/pg_read_binary_file/pg_ls_dir leem arquivos e
+#            diretórios do servidor; lo_import/lo_export leem/escrevem via
+#            large objects — todas exigem privilégio elevado, mas são
+#            bloqueadas aqui como defesa em profundidade.
+#   - SQLite: load_extension() carrega uma biblioteca nativa arbitrária.
 BLOQUEIOS_REGEX = re.compile(
-    r"\b(insert|update|delete|drop|alter|truncate|create|attach|detach|pragma|vacuum|reindex|replace)\b",
+    r"\b("
+    r"insert|update|delete|drop|alter|truncate|create|attach|detach|pragma|"
+    r"vacuum|reindex|replace|"
+    r"into\s+outfile|into\s+dumpfile|load_file|load_extension|"
+    r"pg_read_file|pg_read_binary_file|pg_ls_dir|lo_import|lo_export"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -308,6 +324,20 @@ def executar_sql(
     return executar_sql_sqlite(db_path, sql, limite_preview, timeout_segundos)
 
 
+def _normalizar_db_url(db_url: str) -> str:
+    """
+    Garante que "postgresql://" e "mysql://" sem driver explicito usem os
+    drivers que este projeto de fato instala (psycopg2 e pymysql). Sem isso,
+    o SQLAlchemy tenta o driver padrao dele (ex: psycopg v3 para postgres),
+    que nao esta instalado aqui, e a conexao falha com "No module named ...".
+    """
+    if db_url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + db_url[len("postgresql://"):]
+    if db_url.startswith("mysql://"):
+        return "mysql+pymysql://" + db_url[len("mysql://"):]
+    return db_url
+
+
 def executar_sql_via_url(
     db_url: str,
     sql: str,
@@ -324,9 +354,15 @@ def executar_sql_via_url(
     if not ok:
         return _erro_execucao(f"SQL invalida: {erro_validacao}")
 
+    db_url = _normalizar_db_url(db_url)
+
     from sqlalchemy import create_engine, text
 
-    engine = create_engine(db_url)
+    try:
+        engine = create_engine(db_url)
+    except Exception as e:
+        return _erro_execucao(f"URL de conexao invalida: {e}")
+
     try:
         opcoes = {}
         if engine.dialect.name == "postgresql":
@@ -335,13 +371,28 @@ def executar_sql_via_url(
         with engine.connect() as conn:
             conn = conn.execution_options(**opcoes) if opcoes else conn
 
-            if engine.dialect.name == "mysql":
+            # Aplica timeout e modo somente-leitura conforme o dialeto detectado.
+            if engine.dialect.name == "postgresql":
+                conn.execute(text(f"SET statement_timeout = {int(timeout_segundos * 1000)}"))
+            elif engine.dialect.name == "mysql":
                 conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
+                conn.execute(text(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}"))
+            elif engine.dialect.name == "sqlite":
+                dbapi_conn = getattr(conn.connection, "dbapi_connection", conn.connection)
+                inicio = time.time()
+
+                def _progress_handler():
+                    return 1 if time.time() - inicio > timeout_segundos else 0
+
+                dbapi_conn.set_progress_handler(_progress_handler, 1000)
 
             resultado = conn.execute(text(sql))
             rows = [dict(linha) for linha in resultado.mappings().all()]
     except Exception as e:
-        return _erro_execucao(f"Falha ao executar SQL: {e}")
+        erro_msg = str(e)
+        if "interrupted" in erro_msg.lower() or "timeout" in erro_msg.lower() or "canceling statement" in erro_msg.lower():
+            return _erro_execucao(f"Query abortada por timeout (> {timeout_segundos}s).")
+        return _erro_execucao(f"Falha ao executar SQL: {erro_msg}")
     finally:
         engine.dispose()
 

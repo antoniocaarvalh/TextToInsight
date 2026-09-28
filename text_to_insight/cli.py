@@ -60,8 +60,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--db-dialeto",
         choices=["sqlite", "postgresql", "mysql"],
-        default="sqlite",
-        help="Dialeto do banco: sqlite, postgresql ou mysql. Padrão: sqlite.",
+        default="",
+        help=(
+            "Dialeto do banco: sqlite, postgresql ou mysql. Se omitido, e detectado "
+            "automaticamente pela extensao de --db-path (.duckdb, .sqlite, etc), "
+            "com sqlite como fallback."
+        ),
     )
     parser.add_argument(
         "--db-host",
@@ -86,8 +90,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-password",
-        default=None,
-        help="Senha do banco remoto.",
+        default=os.getenv("DB_PASSWORD"),
+        help=(
+            "Senha do banco remoto. EVITE usar esta flag diretamente: qualquer "
+            "argumento de linha de comando fica visivel no historico do shell e "
+            "na lista de processos do sistema. Prefira definir a variavel de "
+            "ambiente DB_PASSWORD (ex: no .env)."
+        ),
     )
     parser.add_argument(
         "--db-url",
@@ -165,7 +174,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             "Configure a chave da API antes de executar."
         )
     db_config = None
-    if args.db_dialeto != "sqlite":
+    if args.db_dialeto in ("postgresql", "mysql"):
         db_config = {
             "host": args.db_host,
             "port": args.db_port,

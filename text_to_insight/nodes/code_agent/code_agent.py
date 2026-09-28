@@ -43,10 +43,25 @@ _NOTA_DIALETO = {
 def _resolver_info_dialeto(estado: EstadoTextToInsight) -> tuple[str, str]:
     """Resolve (nome_exibicao, nota_sintaxe) do dialeto configurado no estado.
 
-    Default é sempre 'sqlite', preservando o comportamento anterior quando
-    `db_dialeto` não é informado (compatibilidade retroativa).
+    Ordem de resolução:
+    1. `db_dialeto`, se informado explicitamente.
+    2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
+    3. 'sqlite' como default, preservando o comportamento anterior quando
+       nada é informado (compatibilidade retroativa).
     """
-    dialeto = (estado.get("db_dialeto") or "sqlite").strip().lower()
+    dialeto = (estado.get("db_dialeto") or "").strip().lower()
+
+    if not dialeto:
+        db_url = (estado.get("db_url") or "").strip()
+        if db_url:
+            try:
+                from sqlalchemy.engine import make_url
+
+                dialeto = make_url(db_url).get_backend_name()
+            except Exception:
+                dialeto = ""
+
+    dialeto = dialeto or "sqlite"
     nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
     nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
     return nome, nota

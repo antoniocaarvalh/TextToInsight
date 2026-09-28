@@ -31,7 +31,7 @@ class InsightEngine:
         enrich_rag: bool = False,
         inferir_fks_virtuais: bool = False,
         usar_schemacrawler: bool = True,
-        db_dialeto: str = "sqlite",
+        db_dialeto: str = "",
         db_config: dict | None = None,
         db_url: str = "",
     ):

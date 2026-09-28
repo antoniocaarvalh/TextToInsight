@@ -586,10 +586,19 @@ def _introspeccao_nativa(dialeto: str, caminho_db: Path | None, db_cfg: dict) ->
         finally:
             conn.close()
 
-    # sqlite / duckdb / fallback padrão
-    conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
-    with conn:
-        return _formatar_schema_sqlite(conn)
+    if dialeto == "sqlite":
+        conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
+        with conn:
+            return _formatar_schema_sqlite(conn)
+
+    # duckdb e qualquer outro dialeto sem introspecção nativa: sem fallback
+    # seguro (abrir um arquivo .duckdb com o driver sqlite3 falha ou pode dar
+    # um resultado incorreto silenciosamente).
+    raise RuntimeError(
+        f"Dialeto '{dialeto}' não possui introspecção nativa disponível "
+        "(apenas sqlite, postgresql e mysql). Configure schemacrawler_bin "
+        "para este dialeto."
+    )
 
 def _formatar_schema_sqlalchemy(engine) -> str:
     from sqlalchemy import inspect
@@ -808,11 +817,23 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
     if db_url:
         from sqlalchemy import create_engine
 
-        engine = create_engine(db_url)
+        from .code_agent.code_sql import _normalizar_db_url
+
         try:
-            contexto = _formatar_schema_sqlalchemy(engine)
-        finally:
-            engine.dispose()
+            engine = create_engine(_normalizar_db_url(db_url))
+            try:
+                contexto = _formatar_schema_sqlalchemy(engine)
+            finally:
+                engine.dispose()
+        except Exception as e:
+            msg = f"Falha ao ler schema via db_url: {e}"
+            print(f"[SCHEMA] Erro: {msg}")
+            return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
+
+        if estado.get("inferir_fks_virtuais", False):
+            print("[SCHEMA] Inferindo FKs virtuais.")
+            contexto = _inferir_fks_virtuais(contexto)
+
         return {
             "contexto_schema": contexto,
             "erro_execucao": "",
@@ -873,13 +894,23 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
             print("[SCHEMA] Schema Crawler: introspecção concluída.")
         except Exception as e:
             print(f"[SCHEMA] Schema Crawler falhou ({e}). Tentando fallback nativo...")
-            contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+            try:
+                contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+            except Exception as e2:
+                msg = f"Falha na introspecção nativa (dialeto '{dialeto}'): {e2}"
+                print(f"[SCHEMA] Erro: {msg}")
+                return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
     else:
         if not usar_schemacrawler:
             print(f"[SCHEMA] usar_schemacrawler desativado — usando introspecção nativa ({dialeto}).")
         else:
             print(f"[SCHEMA] schemacrawler_bin não configurado — usando introspecção nativa ({dialeto}).")
-        contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+        try:
+            contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+        except Exception as e:
+            msg = f"Falha na introspecção nativa (dialeto '{dialeto}'): {e}"
+            print(f"[SCHEMA] Erro: {msg}")
+            return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
 
     # --- Heurística de FKs virtuais ---
     if inferir_fks_virtuais:
